@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快樂識字卡 V3.0 (遊戲激勵版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        /* --- 全局樣式 --- */
+        body {
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            background-color: #FFF8E1;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none; 
+            overflow-x: hidden; /* 防止彩帶導致滾動條 */
+        }
+
+        .screen {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative; 
+            z-index: 1; 
+        }
+        
+        .active { display: block; }
+
+        /* --- 遊戲化元素 (新功能) --- */
+        .streak-badge {
+            display: inline-flex;
+            align-items: center;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            font-size: 20px;
+            font-weight: bold;
+            color: #FF6F00;
+            margin-bottom: 20px;
+            border: 2px solid #FFECB3;
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 20px;
+            margin: 20px 0;
+            height: 25px;
+            overflow: hidden;
+            border: 2px solid white;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%; /* 透過 JS 控制 */
+            background: linear-gradient(90deg, #FF6F00, #FFD54F);
+            border-radius: 20px;
+            transition: width 0.5s ease-out;
+        }
+
+        .mission-text {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        /* --- 家長鎖 --- */
+        .parent-lock {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            font-size: 16px;
+            color: #555;
+            cursor: pointer;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 2px solid #ddd;
+            z-index: 10000; 
+            font-weight: bold;
+        }
+
+        /* --- 1. 首頁 --- */
+        .btn-big {
+            background-color: #FF6F00;
+            border: none;
+            border-radius: 50px;
+            padding: 20px 60px;
+            font-size: 30px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #E65100;
+            margin-top: 30px;
+            transition: transform 0.1s;
+        }
+        .btn-big:active {
+            transform: translateY(4px);
+            box-shadow: 0 4px 0 #E65100;
+        }
+
+        /* --- 2. 學習介面 --- */
+        .card {
+            background: white;
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin: 10px auto;
+            border: 8px solid #FFECB3;
+        }
+        
+        .card img {
+            width: 100%;
+            height: 320px;
+            object-fit: contain;
+            border-radius: 15px;
+            background-color: #fafafa;
+        }
+
+        .word-display {
+            font-size: 60px;
+            color: #333;
+            margin: 15px 0 5px 0;
+            font-weight: bold;
+            letter-spacing: 5px;
+        }
+        
+        .english-display {
+            font-size: 28px;
+            color: #FF6F00;
+            font-family: 'Comic Sans MS', sans-serif;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        /* --- 3. 家長後台 --- */
+        .admin-box {
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            text-align: left;
+        }
+        input {
+            width: 100%; padding: 12px; margin: 10px 0;
+            font-size: 18px; border: 2px solid #ddd; border-radius: 10px; box-sizing: border-box;
+        }
+        .loading-input { background-color: #f0f0f0; color: #999; }
+        .list-item {
+            background: #FFF8E1; padding: 15px; margin-bottom: 10px;
+            border-radius: 10px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .preview-thumb {
+            width: 50px; height: 50px; object-fit: cover;
+            border-radius: 5px; margin-right: 10px; border: 1px solid #ccc;
+        }
+
+        /* --- 4. 彈窗 --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 20000; justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: white; padding: 30px; border-radius: 20px;
+            text-align: center; width: 80%; max-width: 300px;
+        }
+
+        /* --- 通用按鈕 --- */
+        .btn-normal {
+            padding: 12px 24px; border: none; border-radius: 10px;
+            font-size: 16px; cursor: pointer; font-weight: bold; color: white;
+        }
+        .btn-green { background-color: #4CAF50; }
+        .btn-grey { background-color: #90A4AE; }
+        .btn-orange { background-color: #FF6F00; }
+        .btn-voice { 
+            background-color: #29B6F6; box-shadow: 0 6px 0 #0288D1;
+            border: none; border-radius: 50px; color: white; font-weight: bold; cursor: pointer;
+        }
+        .btn-voice:active { box-shadow: 0 3px 0 #0288D1; transform: translateY(3px); }
+        .action-btn {
+            cursor: pointer; margin-left: 10px; font-size: 18px;
+            padding: 5px 10px; border-radius: 5px; background: white; border: 1px solid #ddd;
+        }
+        .action-btn:hover { background-color: #f0f0f0; }
+
+    </style>
+</head>
+<body>
+
+    <div class="parent-lock" onclick="openPasswordModal()">🔒 家長專區</div>
+
+    <div id="screen-welcome" class="screen active">
+        <h1 style="color: #FF6F00; font-size: 40px; margin-bottom: 10px;">🎈 快樂識字卡 🎈</h1>
+        
+        <div class="streak-badge">
+            🔥 連續學習 <span id="streak-days" style="margin: 0 5px; font-size: 24px;">0</span> 天
+        </div>
+
+        <p style="color: #666; font-size: 18px;">準備好學習今天的生字了嗎？</p>
+        <button class="btn-big" onclick="startLearning()">開始玩！</button>
+    </div>
+
+    <div id="screen-learning" class="screen">
+        
+        <div style="max-width: 90%; margin: 0 auto;">
+            <div class="mission-text">🎯 今日任務：<span id="progress-text">0/10</span></div>
+            <div class="progress-container">
+                <div id="daily-bar" class="progress-bar"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <img id="card-img" src="" alt="AI 生成圖片">
+            <div class="word-display" id="card-word">...</div>
+            <div class="english-display" id="card-eng">...</div>
+            <br>
+            <button class="btn-voice" style="font-size: 22px; padding: 15px 40px;" onclick="speakSequence()">🔊 聽一聽</button>
+        </div>
+        
+        <div class="nav-buttons">
+            <button class="btn-normal btn-grey" onclick="prevCard()">⬅️ 上一張</button>
+            <button class="btn-normal btn-green" onclick="goHome()">🏠</button>
+            <button class="btn-normal btn-orange" onclick="nextCard(true)">下一張 ➡️</button>
+        </div>
+    </div>
+
+    <div id="screen-admin" class="screen">
+        <h2 style="color:#555">🔧 家長控制台</h2>
+        <div class="admin-box">
+            <h3>🎨 新增 AI 生字卡</h3>
+            <label>中文 (繁體)：</label>
+            <input type="text" id="input-zh" placeholder="輸入中文..." onchange="autoTranslate('zh')">
+            <label>英文 (English)：</label>
+            <input type="text" id="input-en" placeholder="輸入英文..." onchange="autoTranslate('en')">
+            <button class="btn-normal btn-green" onclick="addWord()">➕ 生成卡片</button>
+            <button class="btn-normal btn-grey" onclick="goHome()">⬅️ 退出</button>
+            <hr style="border: 0; border-top: 1px dashed #ccc; margin: 20px 0;">
+            <h3>📚 卡片列表 (共 <span id="total-words">0</span> 張)</h3>
+            <div id="word-list-display" class="word-list"></div>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="clearAllData()" style="color:red; border:1px solid red; background:none; padding:5px; border-radius:5px; cursor:pointer;">⚠️ 清空資料</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="password-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>🔑 家長驗證</h3>
+            <p>請輸入密碼 (預設: 1234)</p>
+            <input type="password" id="modal-pwd-input" style="text-align:center; font-size:24px; letter-spacing:5px;">
+            <br><br>
+            <button class="btn-normal btn-grey" onclick="closePasswordModal()">取消</button>
+            <button class="btn-normal btn-orange" onclick="checkPassword()">確定</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 核心變數 ---
+        let vocabularyList = [];
+        let currentIndex = 0;
+        let historyStack = []; 
+        
+        // --- 遊戲化變數 ---
+        let userStats = {
+            streak: 0,
+            lastLoginDate: "",
+            dailyCount: 0,
+            lastPlayedDate: ""
+        };
+        const DAILY_GOAL = 10; // 每天目標看 10 張
+
+        window.onload = function() {
+            loadData();
+            checkStreak(); // 檢查連續登入
+            updateUI();
+        };
+
+        // --- 資料讀取與保存 ---
+        function loadData() {
+            try {
+                // 讀取卡片
+                const savedData = localStorage.getItem('myKidsVocabV2');
+                if (savedData) vocabularyList = JSON.parse(savedData);
+                
+                // 讀取遊戲進度
+                const savedStats = localStorage.getItem('myKidsStats');
+                if (savedStats) userStats = JSON.parse(savedStats);
+            } catch (e) { console.error("讀取失敗", e); }
+        }
+
+        function saveStats() {
+            localStorage.setItem('myKidsStats', JSON.stringify(userStats));
+        }
+        
+        function saveData() { 
+            localStorage.setItem('myKidsVocabV2', JSON.stringify(vocabularyList)); 
+        }
+
+        // --- 遊戲化邏輯 (Streak & Progress) ---
+        function checkStreak() {
+            const today = new Date().toDateString();
+            
+            // 如果今天是第一次玩
+            if (userStats.lastPlayedDate !== today) {
+                userStats.dailyCount = 0; // 重置今日計數
+                
+                // 檢查是否是連續第二天
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                if (userStats.lastLoginDate === yesterday.toDateString()) {
+                    // 是連續的！
+                    // 這裡暫時不加 streak，等完成任務再加？或者登入就加？
+                    // 簡單起見：登入就算連續
+                    userStats.streak++; 
+                } else if (userStats.lastLoginDate !== today) {
+                    // 斷掉了，或者是第一天
+                    userStats.streak = 1;
+                }
+                
+                userStats.lastLoginDate = today;
+                userStats.lastPlayedDate = today;
+                saveStats();
+            }
+        }
+
+        function updateProgress(increment = false) {
+            if (increment) {
+                userStats.dailyCount++;
+                saveStats();
+                
+                // 檢查是否剛剛好達成目標，觸發慶祝
+                if (userStats.dailyCount === DAILY_GOAL) {
+                    triggerConfetti();
+                    // 播放歡呼音效 (可選)
+                    speak("恭喜你，完成了今天的任務！");
+                }
+            }
+
+            // 更新 UI
+            const percentage = Math.min((userStats.dailyCount / DAILY_GOAL) * 100, 100);
+            document.getElementById('daily-bar').style.width = percentage + '%';
+            document.getElementById('progress-text').innerText = `${userStats.dailyCount}/${DAILY_GOAL}`;
+            document.getElementById('streak-days').innerText = userStats.streak;
+        }
+
+        function triggerConfetti() {
+            // 發射彩帶！
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 20000 };
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) { return clearInterval(interval); }
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
+        // --- 密碼邏輯 ---
+        function openPasswordModal() {
+            document.getElementById('password-modal').style.display = 'flex';
+            document.getElementById('modal-pwd-input').value = '';
+            document.getElementById('modal-pwd-input').focus();
+        }
+        function closePasswordModal() { document.getElementById('password-modal').style.display = 'none'; }
+        function checkPassword() {
+            if (document.getElementById('modal-pwd-input').value === '1234') {
+                closePasswordModal(); switchScreen('screen-admin');
+            } else { alert('密碼錯誤！'); }
+        }
+
+        // --- 翻譯與新增 ---
+        async function autoTranslate(sourceType) {
+            const zh = document.getElementById('input-zh');
+            const en = document.getElementById('input-en');
+            let text="", target=null, pair="";
+            if (sourceType === 'zh' && zh.value && !en.value) { text=zh.value; target=en; pair="zh-TW|en"; }
+            else if (sourceType === 'en' && en.value && !zh.value) { text=en.value; target=zh; pair="en|zh-TW"; }
+            if (target && text) {
+                target.placeholder = "翻譯中...";
+                try {
+                    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`);
+                    const data = await res.json();
+                    if(data.responseData) target.value = data.responseData.translatedText;
+                } catch(e){} finally { target.placeholder=""; }
+            }
+        }
+
+        function addWord() {
+            const zh = document.getElementById('input-zh').value.trim();
+            const en = document.getElementById('input-en').value.trim();
+            if (!zh || !en) { alert("請填寫完整！"); return; }
+            const newCard = {
+                id: Date.now(),
+                zh: zh,
+                en: en,
+                img: generateAiUrl(en),
+                level: 0
+            };
+            vocabularyList.push(newCard);
+            saveData();
+            document.getElementById('input-zh').value = '';
+            document.getElementById('input-en').value = '';
+            updateUI();
+            alert("已新增！");
+        }
+
+        function generateAiUrl(englishWord) {
+            const prompt = encodeURIComponent(`cute cartoon 3d render of ${englishWord}, white background, pixar style, bright colors, for kids`);
+            return `https://image.pollinations.ai/prompt/${prompt}?width=600&height=600&nologo=true&seed=${Math.random()}`;
+        }
+
+        function regenerateImage(id) {
+            const card = vocabularyList.find(c => c.id === id);
+            if (card) {
+                card.img = generateAiUrl(card.en);
+                saveData();
+                updateUI();
+                if (vocabularyList[currentIndex].id === id) showCard(currentIndex);
+            }
+        }
+
+        function deleteWord(id) {
+            if(confirm("確定刪除？")) {
+                vocabularyList = vocabularyList.filter(c => c.id !== id);
+                saveData();
+                updateUI();
+            }
+        }
+
+        function clearAllData() {
+            if(confirm("刪除所有資料？")) { 
+                localStorage.removeItem('myKidsVocabV2'); 
+                localStorage.removeItem('myKidsStats');
+                vocabularyList=[]; userStats={streak:0, dailyCount:0, lastPlayedDate:""};
+                updateUI(); 
+            }
+        }
+
+        function updateUI() {
+            // Update Text
+            document.getElementById('total-words').innerText = vocabularyList.length;
+            document.getElementById('streak-days').innerText = userStats.streak;
+            updateProgress(false); // 刷新進度條顯示
+
+            // Update List
+            const listDiv = document.getElementById('word-list-display');
+            listDiv.innerHTML = '';
+            [...vocabularyList].reverse().forEach(card => {
+                listDiv.innerHTML += `
+                    <div class="list-item">
+                        <div style="display:flex; align-items:center;">
+                            <img src="${card.img}" class="preview-thumb">
+                            <span><b>${card.zh}</b> <br><small>${card.en}</small></span>
+                        </div>
+                        <div>
+                            <button class="action-btn" onclick="regenerateImage(${card.id})" title="重畫">🔄</button>
+                            <button class="action-btn" onclick="deleteWord(${card.id})" style="color:red;" title="刪除">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- 學習與導航 ---
+        function startLearning() {
+            if (vocabularyList.length === 0) { alert("請先新增卡片！"); return; }
+            historyStack = [];
+            currentIndex = Math.floor(Math.random() * vocabularyList.length);
+            showCard(currentIndex);
+            switchScreen('screen-learning');
+            updateProgress(false); // 剛進來時更新一下進度條
+        }
+
+        function showCard(index) {
+            const card = vocabularyList[index];
+            document.getElementById('card-word').innerText = card.zh;
+            document.getElementById('card-eng').innerText = card.en;
+            document.getElementById('card-img').src = card.img;
+        }
+
+        function nextCard(isUserAction = false) {
+            window.speechSynthesis.cancel();
+            
+            // 如果是使用者按的下一張，才算進度
+            if (isUserAction) {
+                updateProgress(true);
+            }
+
+            historyStack.push(currentIndex);
+            
+            // 簡單隨機邏輯 (之後可升級為遺忘曲線)
+            let nextIndex = Math.floor(Math.random() * vocabularyList.length);
+            if (vocabularyList.length > 1 && nextIndex === currentIndex) {
+                nextIndex = (currentIndex + 1) % vocabularyList.length;
+            }
+            currentIndex = nextIndex;
+            showCard(currentIndex);
+        }
+
+        function prevCard() {
+            window.speechSynthesis.cancel();
+            if (historyStack.length > 0) {
+                currentIndex = historyStack.pop();
+                showCard(currentIndex);
+            } else {
+                alert("已經是第一張了喔！");
+            }
+        }
+
+        function speak(text) {
+             const u = new SpeechSynthesisUtterance(text);
+             const v = window.speechSynthesis.getVoices().find(v => v.lang.includes('zh-HK'));
+             if(v) u.voice = v;
+             window.speechSynthesis.speak(u);
+        }
+
+        function speakSequence() {
+            window.speechSynthesis.cancel();
+            const card = vocabularyList[currentIndex];
+            const voices = window.speechSynthesis.getVoices();
+            
+            const utterZh = new SpeechSynthesisUtterance(card.zh);
+            const cantoneseVoice = voices.find(v => v.lang.includes('zh-HK'));
+            if (cantoneseVoice) utterZh.voice = cantoneseVoice;
+            utterZh.rate = 0.8;
+
+            const utterEn = new SpeechSynthesisUtterance(card.en);
+            const englishVoice = voices.find(v => v.lang.includes('en-'));
+            if (englishVoice) utterEn.voice = englishVoice;
+            utterEn.rate = 0.9;
+
+            utterZh.onend = function() { setTimeout(() => { window.speechSynthesis.speak(utterEn); }, 300); };
+            window.speechSynthesis.speak(utterZh);
+        }
+
+        function goHome() {
+            window.speechSynthesis.cancel();
+            updateUI(); // 回首頁時刷新 streak 顯示
+            switchScreen('screen-welcome');
+        }
+
+        function switchScreen(id) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+    </script>
+</body>
+</html>
